@@ -12,7 +12,9 @@ import it.lagioiaproduction.ui.theme.AppColors;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.net.URL;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 public class MainFrame extends JFrame {
@@ -29,10 +31,40 @@ public class MainFrame extends JFrame {
         super("Teams Stream Lecture Downloader");
         this.coordinator = coordinator;
 
+        applyWindowIcon();
         buildUi();
         bindActions();
         refreshSessionState();
         updateCounters();
+    }
+
+    private void applyWindowIcon() {
+        List<Image> icons = new ArrayList<>();
+
+        addIconIfPresent(icons, "/icon/app-16.png");
+        addIconIfPresent(icons, "/icon/app-32.png");
+        addIconIfPresent(icons, "/icon/app-48.png");
+        addIconIfPresent(icons, "/icon/app-64.png");
+        addIconIfPresent(icons, "/icon/app-128.png");
+        addIconIfPresent(icons, "/icon/app-256.png");
+
+        if (!icons.isEmpty()) {
+            setIconImages(icons);
+            return;
+        }
+
+        URL fallbackUrl = getClass().getResource("/icon/app.png");
+        if (fallbackUrl != null) {
+            Image fallback = new ImageIcon(fallbackUrl).getImage();
+            setIconImage(fallback);
+        }
+    }
+
+    private void addIconIfPresent(List<Image> icons, String resourcePath) {
+        URL url = getClass().getResource(resourcePath);
+        if (url != null) {
+            icons.add(new ImageIcon(url).getImage());
+        }
     }
 
     private void buildUi() {
