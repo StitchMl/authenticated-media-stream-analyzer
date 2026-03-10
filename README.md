@@ -13,6 +13,23 @@ The application automates:
 
 ---
 
+## Prerequisites
+
+Before using the application, make sure the following software is installed on your system:
+
+### 1. FFmpeg
+This application relies on [`ffmpeg`](https://www.ffmpeg.org/download.html) to download and save video streams.
+
+Install FFmpeg first and make sure it is available in your system `PATH`.
+
+You can verify the installation with:
+
+```bash
+ffmpeg -version
+```
+
+---
+
 ## Features
 
 - Modern desktop UI built with Swing + FlatLaf
