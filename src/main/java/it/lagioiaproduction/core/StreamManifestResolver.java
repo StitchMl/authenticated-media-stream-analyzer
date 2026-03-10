@@ -33,7 +33,7 @@ public class StreamManifestResolver {
     private static final int MAX_ATTEMPTS = 4;
     private static final long[] RETRY_DELAYS_MS = {5_000L, 15_000L, 30_000L, 45_000L};
 
-    private static final Path DIAGNOSTICS_DIR = Paths.get("debug", "resolve-failures");
+    private static final Path DIAGNOSTICS_DIR = resolveAppDataDir().resolve("debug").resolve("resolve-failures");
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
@@ -66,7 +66,9 @@ public class StreamManifestResolver {
 
         try (Playwright playwright = Playwright.create();
              Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions().setHeadless(true)
+                     new BrowserType.LaunchOptions()
+                             .setChannel("msedge")
+                             .setHeadless(true)
              )) {
 
             BrowserContext context = browser.newContext(
@@ -255,6 +257,15 @@ public class StreamManifestResolver {
         } catch (Exception diagEx) {
             log(logger, "Impossibile salvare la diagnostica: " + diagEx.getMessage());
         }
+    }
+
+    private static Path resolveAppDataDir() {
+        String localAppData = System.getenv("LOCALAPPDATA");
+        if (localAppData != null && !localAppData.isBlank()) {
+            return Paths.get(localAppData, "TeamsStreamLectureDownloader");
+        }
+
+        return Paths.get(System.getProperty("user.home"), ".teams-stream-lecture-downloader");
     }
 
     private String safePageUrl(Page page) {

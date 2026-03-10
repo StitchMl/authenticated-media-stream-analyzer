@@ -2,7 +2,6 @@ package it.lagioiaproduction.core;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 
@@ -12,7 +11,8 @@ import java.nio.file.Paths;
 import java.util.function.Consumer;
 
 public class StreamLoginService {
-    private static final Path AUTH_STATE = Paths.get("playwright", ".auth", "state.json");
+    private static final Path APP_DATA_DIR = resolveAppDataDir();
+    private static final Path AUTH_STATE = APP_DATA_DIR.resolve("playwright").resolve(".auth").resolve("state.json");
     private static final double LOGIN_TIMEOUT_MS = 300_000;
 
     public boolean hasAuthState() {
@@ -28,7 +28,8 @@ public class StreamLoginService {
 
         try (Playwright playwright = Playwright.create();
              Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions()
+                     new com.microsoft.playwright.BrowserType.LaunchOptions()
+                             .setChannel("msedge")
                              .setHeadless(false)
                              .setSlowMo(150)
              )) {
@@ -36,9 +37,9 @@ public class StreamLoginService {
             BrowserContext context = browser.newContext();
             Page page = context.newPage();
 
-            log(logger, "Apro il browser per il login Microsoft...");
+            log(logger, "Apro Microsoft Edge per il login...");
             page.navigate("https://login.microsoftonline.com/");
-            log(logger, "Completa login nel browser.");
+            log(logger, "Completa login ed eventuale MFA nel browser.");
 
             waitUntilLoginCompleted(page);
 
@@ -59,5 +60,14 @@ public class StreamLoginService {
         if (logger != null) {
             logger.accept(message);
         }
+    }
+
+    private static Path resolveAppDataDir() {
+        String localAppData = System.getenv("LOCALAPPDATA");
+        if (localAppData != null && !localAppData.isBlank()) {
+            return Paths.get(localAppData, "TeamsStreamLectureDownloader");
+        }
+
+        return Paths.get(System.getProperty("user.home"), ".teams-stream-lecture-downloader");
     }
 }
