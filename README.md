@@ -6,7 +6,7 @@ The application automates:
 - Microsoft login session persistence
 - Stream/SharePoint embed resolution
 - DASH manifest interception
-- direct media download through `ffmpeg`
+- direct media download through [`ffmpeg`](https://www.ffmpeg.org/download.html)
 - multi-download queue management with per-file progress UI
 
 > Use this tool only for content you are authorized to access and download.
