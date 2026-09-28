@@ -163,7 +163,7 @@ mvn exec:java -Dexec.mainClass="it.lagioiaproduction.app.TeamsLectureDownloaderA
 ### From the packaged JAR
 
 ```bash
-java -jar target/teams-stream-lecture-downloader-1.0.2.jar
+java -jar target/teams-stream-lecture-downloader-1.0.3.jar
 ```
 
 ---
@@ -172,13 +172,16 @@ java -jar target/teams-stream-lecture-downloader-1.0.2.jar
 
 ### 1. Save your Microsoft session
 
-Click **Login Microsoft** and complete the authentication flow in the browser window.
+Click **Login Microsoft** and complete the authentication flow in the Edge window
+(answer **Yes** to "Stay signed in?"). The window closes by itself once the login is really completed.
 
-The application stores the authenticated session in:
+Login and downloads share a dedicated, persistent Edge profile stored in:
 
 ```text
-playwright/.auth/state.json
+%LOCALAPPDATA%\TeamsStreamLectureDownloader\edge-profile
 ```
+
+so the Microsoft session behaves like in a normal browser (cookies, tokens, Windows single sign-on).
 
 ### 2. Add one or more recording links
 
@@ -215,7 +218,7 @@ Instead, the application:
 
 * opens a real browser window
 * lets the user complete Microsoft login and MFA
-* stores Playwright browser state locally
+* keeps the session in a dedicated local Edge profile
 
 This approach is safer and more robust than hardcoding credentials.
 
@@ -224,7 +227,7 @@ This approach is safer and more robust than hardcoding credentials.
 Do **not** commit this file:
 
 ```text
-playwright/.auth/state.json
+edge-profile/ and playwright/.auth/state.json
 ```
 
 ---
@@ -266,9 +269,12 @@ up to date by Dependabot (`.github/dependabot.yml`). Update it, rebuild, and mak
 
 If downloads stop working because authentication is no longer valid:
 
-1. delete the saved auth state if needed
-2. run the app again
-3. click **Login Microsoft**
+the app stops with "Sessione Microsoft non valida o scaduta": click **Login Microsoft** again.
+If the problem persists, delete `%LOCALAPPDATA%\TeamsStreamLectureDownloader\edge-profile` and log in again.
+
+### "Non ha accesso a questa registrazione"
+
+The account used for the login cannot open that recording: check the link or log in with the right account.
 
 ---
 

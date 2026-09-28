@@ -342,7 +342,13 @@ public class DownloadCoordinator {
         while (current.getCause() != null) {
             current = current.getCause();
         }
-        return current.getMessage() != null ? current.getMessage() : current.toString();
+        if (current.getMessage() == null) {
+            return current.toString();
+        }
+        // Gli errori Playwright includono stack JavaScript e call log: in UI basta la prima riga.
+        String message = current.getMessage().replace("Error {", "").replace("message='", "").trim();
+        int newline = message.indexOf('\n');
+        return newline == -1 ? message : message.substring(0, newline).trim();
     }
 
     private void notifyStatus(Consumer<String> statusConsumer, String message) {

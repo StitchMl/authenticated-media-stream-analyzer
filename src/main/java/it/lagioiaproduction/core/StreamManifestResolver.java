@@ -1,19 +1,18 @@
 package it.lagioiaproduction.core;
 
-import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Request;
+import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.LoadState;
 import it.lagioiaproduction.model.ResolvedStream;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -32,7 +31,10 @@ public class StreamManifestResolver {
     private static final int MAX_ATTEMPTS = 4;
     private static final long[] RETRY_DELAYS_MS = {5_000L, 15_000L, 30_000L, 45_000L};
 
-    private static final Path DIAGNOSTICS_DIR = resolveAppDataDir().resolve("debug").resolve("resolve-failures");
+    private static final double SSO_REDIRECT_TIMEOUT_MS = 30_000;
+
+    private static final Path DIAGNOSTICS_DIR =
+            PlaywrightBrowserFactory.APP_DATA_DIR.resolve("debug").resolve("resolve-failures");
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS");
 
@@ -43,6 +45,9 @@ public class StreamManifestResolver {
             try {
                 log(logger, "Risoluzione link: tentativo " + attempt + "/" + MAX_ATTEMPTS);
                 return resolveOnce(streamUrl, authStatePath, logger);
+            } catch (NonRetryableResolveException ex) {
+                // Riprovare non serve: serve un intervento dell'utente (nuovo login o permessi).
+                throw ex;
             } catch (Exception ex) {
                 last = ex;
                 log(logger, "Tentativo " + attempt + " fallito: " + rootCauseMessage(ex));
@@ -64,17 +69,15 @@ public class StreamManifestResolver {
         }
 
         try (Playwright playwright = PlaywrightBrowserFactory.createPlaywright();
-             Browser browser = PlaywrightBrowserFactory.launch(playwright, true)) {
+             BrowserContext context = PlaywrightBrowserFactory.launchPersistent(playwright, true)) {
 
-            BrowserContext context = browser.newContext(
-                    new Browser.NewContextOptions().setStorageStatePath(authStatePath)
-            );
-
-            Page streamPage = context.newPage();
+            Page streamPage = PlaywrightBrowserFactory.firstPage(context);
             try {
                 log(logger, "Apro la pagina Stream...");
                 streamPage.navigate(streamUrl);
+                waitForSingleSignOn(streamPage);
                 waitForBasePageReady(streamPage);
+                ensureAccessGranted(streamPage);
 
                 log(logger, "Cerco il codice di incorporamento...");
                 openEmbedDialog(streamPage, logger);
@@ -108,10 +111,35 @@ public class StreamManifestResolver {
                         embedUrl,
                         manifestUrl
                 );
+            } catch (NonRetryableResolveException ex) {
+                throw ex;
             } catch (Exception ex) {
                 dumpDiagnostics(streamPage, streamUrl, logger);
                 throw ex;
             }
+        }
+    }
+
+    private void waitForSingleSignOn(Page page) {
+        // SharePoint passa da login.microsoftonline.com: con una sessione valida il redirect è automatico.
+        try {
+            page.waitForURL(
+                    url -> !PlaywrightBrowserFactory.isMicrosoftLoginUrl(url),
+                    new Page.WaitForURLOptions().setTimeout(SSO_REDIRECT_TIMEOUT_MS)
+            );
+        } catch (TimeoutError ex) {
+            throw new NonRetryableResolveException(
+                    "Sessione Microsoft non valida o scaduta: premi 'Login Microsoft' e completa l'accesso.", ex);
+        }
+    }
+
+    private void ensureAccessGranted(Page page) {
+        // Pagina SharePoint "Accesso necessario / Non hai accesso a questo elemento".
+        boolean denied = page.locator("text=/Non hai accesso a questo elemento|You need access|You don't have access/i")
+                .count() > 0;
+        if (denied) {
+            throw new NonRetryableResolveException(
+                    "L'account con cui hai fatto il login non ha accesso a questa registrazione.", null);
         }
     }
 
@@ -238,11 +266,13 @@ public class StreamManifestResolver {
             Path screenshotPath = DIAGNOSTICS_DIR.resolve(baseName + ".png");
             Path htmlPath = DIAGNOSTICS_DIR.resolve(baseName + ".html");
 
-            page.screenshot(new Page.ScreenshotOptions()
-                    .setPath(screenshotPath)
-                    .setFullPage(true));
-
             Files.writeString(htmlPath, page.content(), StandardCharsets.UTF_8);
+
+            try {
+                page.screenshot(new Page.ScreenshotOptions().setPath(screenshotPath));
+            } catch (PlaywrightException screenshotEx) {
+                log(logger, "Screenshot non disponibile: " + firstLine(screenshotEx.getMessage()));
+            }
 
             log(logger, "Diagnostica salvata:");
             log(logger, " - Pagina attuale: " + safePageUrl(page));
@@ -252,15 +282,6 @@ public class StreamManifestResolver {
         } catch (Exception diagEx) {
             log(logger, "Impossibile salvare la diagnostica: " + diagEx.getMessage());
         }
-    }
-
-    private static Path resolveAppDataDir() {
-        String localAppData = System.getenv("LOCALAPPDATA");
-        if (localAppData != null && !localAppData.isBlank()) {
-            return Paths.get(localAppData, "TeamsStreamLectureDownloader");
-        }
-
-        return Paths.get(System.getProperty("user.home"), ".teams-stream-lecture-downloader");
     }
 
     private String safePageUrl(Page page) {
@@ -290,7 +311,21 @@ public class StreamManifestResolver {
         while (current.getCause() != null) {
             current = current.getCause();
         }
-        return current.getMessage() != null ? current.getMessage() : current.toString();
+        return current.getMessage() != null ? firstLine(current.getMessage()) : current.toString();
+    }
+
+    private static String firstLine(String message) {
+        if (message == null) {
+            return "";
+        }
+        int newline = message.indexOf('\n');
+        return newline == -1 ? message : message.substring(0, newline);
+    }
+
+    static final class NonRetryableResolveException extends IllegalStateException {
+        NonRetryableResolveException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     private void sleep(long millis) {
