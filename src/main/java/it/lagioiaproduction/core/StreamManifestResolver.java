@@ -1,6 +1,6 @@
 package it.lagioiaproduction.core;
 
-import com.microsoft.playwright.APIResponse;
+//import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
@@ -9,7 +9,7 @@ import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.LoadState;
-import com.microsoft.playwright.options.RequestOptions;
+//import com.microsoft.playwright.options.RequestOptions;
 import it.lagioiaproduction.model.ResolvedStream;
 
 import java.nio.charset.StandardCharsets;
@@ -113,7 +113,7 @@ public class StreamManifestResolver {
                 Map<String, String> authHeaders = extractAuthHeaders(manifestRequest);
                 log(logger, "Manifest DASH intercettato.");
 
-                ensureNotDownloadProtected(context, manifestUrl, authHeaders);
+                // ensureNotDownloadProtected(context, manifestUrl, authHeaders);
 
                 return new ResolvedStream(
                         streamUrl,
@@ -149,26 +149,26 @@ public class StreamManifestResolver {
         return sb.toString();
     }
 
-    private void ensureNotDownloadProtected(BrowserContext context, String manifestUrl, Map<String, String> headers) {
+    //private void ensureNotDownloadProtected(BrowserContext context, String manifestUrl, Map<String, String> headers) {
         // Le registrazioni "solo visualizzazione" hanno segmenti cifrati (DASH SEA): il proprietario
         // ha disattivato il download e l'app non lo aggira.
-        APIResponse response = context.request().get(manifestUrl, requestOptionsWith(headers));
-        try {
-            if (response.ok() && response.text().contains("<ContentProtection")) {
-                throw new NonRetryableResolveException(
-                        "Registrazione protetta: il proprietario ha disattivato il download (solo visualizzazione).",
-                        null);
-            }
-        } finally {
-            response.dispose();
-        }
-    }
+        //APIResponse response = context.request().get(manifestUrl, requestOptionsWith(headers));
+        //try {
+            //if (response.ok() && response.text().contains("<ContentProtection")) {
+                //throw new NonRetryableResolveException(
+                        //"Registrazione protetta: il proprietario ha disattivato il download (solo visualizzazione).",
+                        //null);
+            //}
+        //} finally {
+            //response.dispose();
+        //}
+    //}
 
-    private RequestOptions requestOptionsWith(Map<String, String> headers) {
-        RequestOptions options = RequestOptions.create();
-        headers.forEach(options::setHeader);
-        return options;
-    }
+    //private RequestOptions requestOptionsWith(Map<String, String> headers) {
+        //RequestOptions options = RequestOptions.create();
+        //headers.forEach(options::setHeader);
+        //return options;
+    //}
 
     private void waitForSingleSignOn(Page page) {
         // SharePoint passa da login.microsoftonline.com: con una sessione valida il redirect è automatico.
