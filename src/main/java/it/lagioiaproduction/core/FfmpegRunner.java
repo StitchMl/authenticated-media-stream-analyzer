@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,16 +24,22 @@ public class FfmpegRunner {
     public record ProgressUpdate(double fraction, String detail) {
     }
 
-    public void download(String manifestUrl, Path outputFile, Consumer<ProgressUpdate> progressConsumer)
+    public void download(String manifestUrl, String requestHeaders, Path outputFile,
+                         Consumer<ProgressUpdate> progressConsumer)
             throws IOException, InterruptedException {
 
-        ProcessBuilder pb = new ProcessBuilder(
-                "ffmpeg",
-                "-y",
+        List<String> command = new ArrayList<>(List.of("ffmpeg", "-y"));
+        if (requestHeaders != null && !requestHeaders.isBlank()) {
+            command.add("-headers");
+            command.add(requestHeaders);
+        }
+        command.addAll(List.of(
                 "-i", manifestUrl,
                 "-c", "copy",
                 outputFile.toAbsolutePath().toString()
-        );
+        ));
+
+        ProcessBuilder pb = new ProcessBuilder(command);
 
         pb.redirectErrorStream(true);
         Process process = pb.start();

@@ -87,38 +87,38 @@ Generated filenames follow the pattern:
 
 ```text
 src/main/java/it/lagioiaproduction/
-├─ app/
-│  └─ TeamsLectureDownloaderApp.java
-├─ ui/
-│  ├─ MainFrame.java
-│  ├─ theme/
-│  │  ├─ AppColors.java
-│  │  └─ AppTheme.java
-│  ├─ components/
-│  │  ├─ BadgeLabel.java
-│  │  ├─ HintTextArea.java
-│  │  ├─ LinkItemPanel.java
-│  │  ├─ ModernButton.java
-│  │  ├─ ProgressItemPanel.java
-│  │  ├─ RoundedPanel.java
-│  │  └─ ScrollableContentPanel.java
-│  └─ sections/
-│     ├─ HeaderSection.java
-│     ├─ InputSection.java
-│     ├─ ProgressSection.java
-│     └─ StatsSection.java
-├─ core/
-│  ├─ DownloadCoordinator.java
-│  ├─ FileNameGenerator.java
-│  ├─ FfmpegRunner.java
-│  ├─ PlaywrightBrowserFactory.java
-│  ├─ StreamLoginService.java
-│  └─ StreamManifestResolver.java
-└─ model/
-   ├─ DownloadProgress.java
-   ├─ DownloadRequest.java
-   ├─ DownloadSummary.java
-   └─ ResolvedStream.java
+â”œâ”€ app/
+â”‚  â””â”€ TeamsLectureDownloaderApp.java
+â”œâ”€ ui/
+â”‚  â”œâ”€ MainFrame.java
+â”‚  â”œâ”€ theme/
+â”‚  â”‚  â”œâ”€ AppColors.java
+â”‚  â”‚  â””â”€ AppTheme.java
+â”‚  â”œâ”€ components/
+â”‚  â”‚  â”œâ”€ BadgeLabel.java
+â”‚  â”‚  â”œâ”€ HintTextArea.java
+â”‚  â”‚  â”œâ”€ LinkItemPanel.java
+â”‚  â”‚  â”œâ”€ ModernButton.java
+â”‚  â”‚  â”œâ”€ ProgressItemPanel.java
+â”‚  â”‚  â”œâ”€ RoundedPanel.java
+â”‚  â”‚  â””â”€ ScrollableContentPanel.java
+â”‚  â””â”€ sections/
+â”‚     â”œâ”€ HeaderSection.java
+â”‚     â”œâ”€ InputSection.java
+â”‚     â”œâ”€ ProgressSection.java
+â”‚     â””â”€ StatsSection.java
+â”œâ”€ core/
+â”‚  â”œâ”€ DownloadCoordinator.java
+â”‚  â”œâ”€ FileNameGenerator.java
+â”‚  â”œâ”€ FfmpegRunner.java
+â”‚  â”œâ”€ PlaywrightBrowserFactory.java
+â”‚  â”œâ”€ StreamLoginService.java
+â”‚  â””â”€ StreamManifestResolver.java
+â””â”€ model/
+   â”œâ”€ DownloadProgress.java
+   â”œâ”€ DownloadRequest.java
+   â”œâ”€ DownloadSummary.java
+   â””â”€ ResolvedStream.java
 ```
 
 ---
@@ -163,7 +163,7 @@ mvn exec:java -Dexec.mainClass="it.lagioiaproduction.app.TeamsLectureDownloaderA
 ### From the packaged JAR
 
 ```bash
-java -jar target/teams-stream-lecture-downloader-1.0.3.jar
+java -jar target/teams-stream-lecture-downloader-1.0.4.jar
 ```
 
 ---

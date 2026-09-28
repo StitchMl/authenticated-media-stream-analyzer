@@ -1,5 +1,6 @@
 package it.lagioiaproduction.core;
 
+import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
@@ -8,6 +9,7 @@ import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.LoadState;
+import com.microsoft.playwright.options.RequestOptions;
 import it.lagioiaproduction.model.ResolvedStream;
 
 import java.nio.charset.StandardCharsets;
@@ -16,6 +18,9 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,6 +37,8 @@ public class StreamManifestResolver {
     private static final long[] RETRY_DELAYS_MS = {5_000L, 15_000L, 30_000L, 45_000L};
 
     private static final double SSO_REDIRECT_TIMEOUT_MS = 30_000;
+
+    private static final List<String> FORWARDED_HEADERS = List.of("x-spopactoken", "origin", "referer");
 
     private static final Path DIAGNOSTICS_DIR =
             PlaywrightBrowserFactory.APP_DATA_DIR.resolve("debug").resolve("resolve-failures");
@@ -103,13 +110,17 @@ public class StreamManifestResolver {
                 );
 
                 String manifestUrl = trimAfterFormatDash(manifestRequest.url());
+                Map<String, String> authHeaders = extractAuthHeaders(manifestRequest);
                 log(logger, "Manifest DASH intercettato.");
+
+                ensureNotDownloadProtected(context, manifestUrl, authHeaders);
 
                 return new ResolvedStream(
                         streamUrl,
                         safePageTitle(streamPage),
                         embedUrl,
-                        manifestUrl
+                        manifestUrl,
+                        toFfmpegHeaders(authHeaders)
                 );
             } catch (NonRetryableResolveException ex) {
                 throw ex;
@@ -118,6 +129,45 @@ public class StreamManifestResolver {
                 throw ex;
             }
         }
+    }
+
+    private Map<String, String> extractAuthHeaders(Request manifestRequest) {
+        Map<String, String> all = manifestRequest.allHeaders();
+        Map<String, String> headers = new LinkedHashMap<>();
+        for (String name : FORWARDED_HEADERS) {
+            String value = all.get(name);
+            if (value != null && !value.isBlank()) {
+                headers.put(name, value);
+            }
+        }
+        return headers;
+    }
+
+    private String toFfmpegHeaders(Map<String, String> headers) {
+        StringBuilder sb = new StringBuilder();
+        headers.forEach((name, value) -> sb.append(name).append(": ").append(value).append("\r\n"));
+        return sb.toString();
+    }
+
+    private void ensureNotDownloadProtected(BrowserContext context, String manifestUrl, Map<String, String> headers) {
+        // Le registrazioni "solo visualizzazione" hanno segmenti cifrati (DASH SEA): il proprietario
+        // ha disattivato il download e l'app non lo aggira.
+        APIResponse response = context.request().get(manifestUrl, requestOptionsWith(headers));
+        try {
+            if (response.ok() && response.text().contains("<ContentProtection")) {
+                throw new NonRetryableResolveException(
+                        "Registrazione protetta: il proprietario ha disattivato il download (solo visualizzazione).",
+                        null);
+            }
+        } finally {
+            response.dispose();
+        }
+    }
+
+    private RequestOptions requestOptionsWith(Map<String, String> headers) {
+        RequestOptions options = RequestOptions.create();
+        headers.forEach(options::setHeader);
+        return options;
     }
 
     private void waitForSingleSignOn(Page page) {

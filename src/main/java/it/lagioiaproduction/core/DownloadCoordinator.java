@@ -234,7 +234,7 @@ public class DownloadCoordinator {
         ));
 
         try {
-            ffmpegRunner.download(resolved.manifestUrl(), outputFile, update ->
+            ffmpegRunner.download(resolved.manifestUrl(), resolved.requestHeaders(), outputFile, update ->
                     notifyProgress(progressConsumer, new DownloadProgress(
                             request.index(),
                             request.total(),
