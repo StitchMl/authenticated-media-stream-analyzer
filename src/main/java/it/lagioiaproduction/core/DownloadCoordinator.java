@@ -234,16 +234,23 @@ public class DownloadCoordinator {
         ));
 
         try {
-            ffmpegRunner.download(resolved.manifestUrl(), resolved.requestHeaders(), outputFile, update ->
+            Consumer<FfmpegRunner.ProgressUpdate> updates = update ->
                     notifyProgress(progressConsumer, new DownloadProgress(
-                            request.index(),
-                            request.total(),
-                            displayName,
-                            "Download in corso",
-                            update.fraction(),
-                            false,
-                            update.detail()
-                    )));
+                            request.index(), request.total(), displayName, "Download in corso",
+                            update.fraction(), false, update.detail()));
+            if (resolved.encrypted()) {
+                notifyStatus(statusConsumer, "Flusso DASH SEA: download e decifratura con sessione browser.");
+                resolveSemaphore.acquire();
+                try {
+                    new SeaStreamDownloader().download(resolved, outputFile, ffmpegRunner, updates);
+                } finally {
+                    markResolveFinished();
+                    resolveSemaphore.release();
+                }
+            } else {
+                ffmpegRunner.download(resolved.manifestUrl(), resolved.requestHeaders(), outputFile, updates);
+            }
+
         } catch (Exception ex) {
             Files.deleteIfExists(outputFile);
 

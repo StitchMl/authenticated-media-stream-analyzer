@@ -28,7 +28,14 @@ public class FfmpegRunner {
                          Consumer<ProgressUpdate> progressConsumer)
             throws IOException, InterruptedException {
 
-        List<String> command = new ArrayList<>(List.of("ffmpeg", "-y"));
+        List<String> command = new ArrayList<>(List.of(
+                "ffmpeg",
+                "-y",
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel", "info",
+                "-rw_timeout", "30000000"
+        ));
         if (requestHeaders != null && !requestHeaders.isBlank()) {
             command.add("-headers");
             command.add(requestHeaders);
@@ -39,13 +46,29 @@ public class FfmpegRunner {
                 outputFile.toAbsolutePath().toString()
         ));
 
+        run(command, outputFile, progressConsumer);
+    }
+
+    public void muxLocal(Path video, Path audio, Path outputFile,
+                         Consumer<ProgressUpdate> progressConsumer) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(List.of("ffmpeg", "-y", "-nostdin", "-hide_banner",
+                "-i", video.toAbsolutePath().toString()));
+        if (audio != null) command.addAll(List.of("-i", audio.toAbsolutePath().toString(),
+                "-map", "0:v:0", "-map", "1:a:0"));
+        command.addAll(List.of("-c", "copy", "-movflags", "+faststart", outputFile.toAbsolutePath().toString()));
+        run(command, outputFile, progressConsumer);
+    }
+
+    private void run(List<String> command, Path outputFile, Consumer<ProgressUpdate> progressConsumer)
+            throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
 
         pb.redirectErrorStream(true);
         Process process = pb.start();
 
         Double totalSeconds = null;
-        String lastRelevantLine = null;
+        String failureReason = null;
+        List<String> ffmpegLog = new ArrayList<>();
 
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -56,7 +79,16 @@ public class FfmpegRunner {
                     continue;
                 }
 
-                lastRelevantLine = line.trim();
+                String cleanLine = redactLog(line.trim());
+
+                String detectedReason = diagnoseFailure(cleanLine);
+                if (detectedReason != null) {
+                    failureReason = detectedReason;
+                }
+                ffmpegLog.add(cleanLine);
+                if (ffmpegLog.size() > 100) {
+                    ffmpegLog.remove(0);
+                }
 
                 if (totalSeconds == null) {
                     Matcher durationMatcher = DURATION_PATTERN.matcher(line);
@@ -83,12 +115,54 @@ public class FfmpegRunner {
         }
 
         int exitCode = process.waitFor();
+
         if (exitCode != 0) {
-            String suffix = lastRelevantLine == null ? "" : " - " + lastRelevantLine;
-            throw new IllegalStateException("ffmpeg terminato con exit code " + exitCode + suffix);
+            String fullLog = String.join(System.lineSeparator(), ffmpegLog);
+
+            Path logFile = outputFile.resolveSibling(
+                    outputFile.getFileName().toString() + ".ffmpeg.log"
+            );
+
+            java.nio.file.Files.writeString(
+                    logFile,
+                    fullLog,
+                    StandardCharsets.UTF_8
+            );
+
+            throw new IllegalStateException(
+                    (failureReason == null ? "Download FFmpeg fallito" : failureReason)
+                            + " (exit code "
+                            + exitCode
+                            + ") - log: "
+                            + logFile.toAbsolutePath()
+            );
         }
 
         notifyProgress(progressConsumer, new ProgressUpdate(1.0, "Download completato."));
+    }
+
+    static String redactLog(String line) {
+        return line.replaceAll("(?i)(https?://[^\\s?]+)\\?[^\\s]*", "$1?[redacted]")
+                .replaceAll("(?i)((?:authorization|cookie|x-spopactoken):).*", "$1 [redacted]");
+    }
+
+    static String diagnoseFailure(String line) {
+        String lower = line.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("401 unauthorized") || lower.contains("403 forbidden")) {
+            return "Accesso negato al manifest o ai segmenti: verifica login e permessi";
+        }
+        if (lower.contains("certificate verify failed") || lower.contains("tls handshake failed")
+                || lower.contains("ssl handshake failed")) {
+            return "Connessione HTTPS/TLS fallita: verifica certificati, proxy e versione di FFmpeg";
+        }
+        if (lower.contains("protocol not found") || lower.contains("not on whitelist")) {
+            return "Protocollo non supportato dalla build di FFmpeg: installa una build con HTTPS/TLS";
+        }
+        if (lower.contains("contentprotection") || lower.contains("decryption")
+                || lower.contains("encrypted") || lower.contains("encryption")) {
+            return "Flusso video cifrato non decifrabile da questa configurazione: usa il download ufficiale se disponibile";
+        }
+        return null;
     }
 
     private void notifyProgress(Consumer<ProgressUpdate> progressConsumer, ProgressUpdate update) {

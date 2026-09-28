@@ -54,8 +54,8 @@ Given a Microsoft Stream / SharePoint recording URL, the application:
 1. opens the page with an authenticated browser session
 2. retrieves the embed page URL
 3. intercepts the `videomanifest` request
-4. extracts the cleaned DASH manifest URL up to `format=dash`
-5. downloads the video with `ffmpeg`
+4. preserves the complete signed DASH URL and checks the authenticated manifest
+5. downloads supported DASH video with `ffmpeg`
 
 Generated filenames follow the pattern:
 
@@ -163,7 +163,7 @@ mvn exec:java -Dexec.mainClass="it.lagioiaproduction.app.TeamsLectureDownloaderA
 ### From the packaged JAR
 
 ```bash
-java -jar target/teams-stream-lecture-downloader-1.0.4.jar
+java -jar target/teams-stream-lecture-downloader-1.0.6.jar
 ```
 
 ---
@@ -291,3 +291,30 @@ Main responsibilities are split as follows:
 * `ui/*`: application interface
 
 This separation keeps the project readable and easier to maintain.
+
+### HTTPS and encrypted video
+
+HTTPS transport is supported by FFmpeg builds with HTTPS/TLS enabled. The app forwards
+captured authentication, origin, referer and user-agent headers and applies a 30-second
+network I/O timeout. It preserves signed URL parameters.
+
+DASH SEA AES-128-CBC is supported for static recordings with one Period,
+an explicit fixed IV, HTTP key delivery and SegmentTemplate/SegmentTimeline addressing.
+The authenticated Edge page fetches keys with the captured `x-spopactoken` and media
+with browser cookies, matching the player. Sensitive requests bypass browser cache and
+certificate verification remains enabled;
+Java decrypts each full segment using AES-CBC with PKCS#7 padding. Initialization segments
+are validated as MP4 and decrypted when SharePoint also encrypts them; clear initialization
+segments remain unchanged. FFmpeg combines the highest-bandwidth video representation and audio
+without re-encoding. Signed URL parameters are preserved.
+
+Keys stay in memory and are cleared after use. Temporary decrypted tracks are removed on
+success and failure. Browser downloads are serialized to protect the persistent Edge profile;
+up to four segment requests run concurrently within a recording. Other encryption schemes,
+key rotation, live streams and unsupported manifest layouts produce explicit errors.
+Signed URLs and session headers are renewed through the player after a media HTTP 401,
+with a bounded retry count and a check that representation and timeline still match.
+Persistent key or media access denials are honored; no certificate checks are disabled.
+
+HTTP 401/403, TLS failures and unsupported protocols are reported separately.
+Failure logs mask URL query strings and sensitive HTTP headers.

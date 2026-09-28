@@ -1,6 +1,5 @@
 package it.lagioiaproduction.core;
 
-//import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
@@ -9,7 +8,6 @@ import com.microsoft.playwright.PlaywrightException;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.LoadState;
-//import com.microsoft.playwright.options.RequestOptions;
 import it.lagioiaproduction.model.ResolvedStream;
 
 import java.nio.charset.StandardCharsets;
@@ -38,7 +36,7 @@ public class StreamManifestResolver {
 
     private static final double SSO_REDIRECT_TIMEOUT_MS = 30_000;
 
-    private static final List<String> FORWARDED_HEADERS = List.of("x-spopactoken", "origin", "referer");
+    private static final List<String> FORWARDED_HEADERS = List.of("x-spopactoken", "origin", "referer", "user-agent");
 
     private static final Path DIAGNOSTICS_DIR =
             PlaywrightBrowserFactory.APP_DATA_DIR.resolve("debug").resolve("resolve-failures");
@@ -81,17 +79,23 @@ public class StreamManifestResolver {
             Page streamPage = PlaywrightBrowserFactory.firstPage(context);
             try {
                 log(logger, "Apro la pagina Stream...");
-                streamPage.navigate(streamUrl);
+                streamPage.navigate(streamUrl, new Page.NavigateOptions()
+                        .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
                 waitForSingleSignOn(streamPage);
                 waitForBasePageReady(streamPage);
                 ensureAccessGranted(streamPage);
 
-                log(logger, "Cerco il codice di incorporamento...");
-                openEmbedDialog(streamPage, logger);
-
-                String iframeHtml = readEmbedTextarea(streamPage);
-                String embedUrl = extractEmbedUrl(iframeHtml);
-                log(logger, "Codice di incorporamento recuperato.");
+                String embedUrl;
+                String pagePath = java.net.URI.create(streamUrl).getPath();
+                if (pagePath != null && pagePath.toLowerCase(java.util.Locale.ROOT).endsWith("/embed.aspx")) {
+                    embedUrl = streamUrl;
+                    log(logger, "Link embed diretto rilevato.");
+                } else {
+                    log(logger, "Cerco il codice di incorporamento...");
+                    openEmbedDialog(streamPage, logger);
+                    embedUrl = extractEmbedUrl(readEmbedTextarea(streamPage));
+                    log(logger, "Codice di incorporamento recuperato.");
+                }
 
                 Page embedPage = context.newPage();
 
@@ -104,23 +108,28 @@ public class StreamManifestResolver {
                         },
                         new Page.WaitForRequestOptions().setTimeout(MANIFEST_TIMEOUT_MS),
                         () -> {
-                            embedPage.navigate(embedUrl);
+                            embedPage.navigate(embedUrl, new Page.NavigateOptions()
+                                    .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
                             embedPage.waitForLoadState(LoadState.DOMCONTENTLOADED);
                         }
                 );
 
-                String manifestUrl = trimAfterFormatDash(manifestRequest.url());
+                String manifestUrl = manifestRequest.url();
                 Map<String, String> authHeaders = extractAuthHeaders(manifestRequest);
                 log(logger, "Manifest DASH intercettato.");
 
-                // ensureNotDownloadProtected(context, manifestUrl, authHeaders);
+                String manifest = BrowserMediaClient.text(embedPage, manifestUrl, authHeaders);
+                DashManifestValidator.validate(manifest);
+                boolean encrypted = DashManifestValidator.parse(manifest)
+                        .getElementsByTagNameNS("*", "ContentProtection").getLength() > 0;
 
                 return new ResolvedStream(
                         streamUrl,
                         safePageTitle(streamPage),
                         embedUrl,
                         manifestUrl,
-                        toFfmpegHeaders(authHeaders)
+                        toFfmpegHeaders(authHeaders),
+                        encrypted ? manifest : null
                 );
             } catch (NonRetryableResolveException ex) {
                 throw ex;
@@ -148,27 +157,6 @@ public class StreamManifestResolver {
         headers.forEach((name, value) -> sb.append(name).append(": ").append(value).append("\r\n"));
         return sb.toString();
     }
-
-    //private void ensureNotDownloadProtected(BrowserContext context, String manifestUrl, Map<String, String> headers) {
-        // Le registrazioni "solo visualizzazione" hanno segmenti cifrati (DASH SEA): il proprietario
-        // ha disattivato il download e l'app non lo aggira.
-        //APIResponse response = context.request().get(manifestUrl, requestOptionsWith(headers));
-        //try {
-            //if (response.ok() && response.text().contains("<ContentProtection")) {
-                //throw new NonRetryableResolveException(
-                        //"Registrazione protetta: il proprietario ha disattivato il download (solo visualizzazione).",
-                        //null);
-            //}
-        //} finally {
-            //response.dispose();
-        //}
-    //}
-
-    //private RequestOptions requestOptionsWith(Map<String, String> headers) {
-        //RequestOptions options = RequestOptions.create();
-        //headers.forEach(options::setHeader);
-        //return options;
-    //}
 
     private void waitForSingleSignOn(Page page) {
         // SharePoint passa da login.microsoftonline.com: con una sessione valida il redirect è automatico.
@@ -293,15 +281,6 @@ public class StreamManifestResolver {
         return matcher.group(1).replace("&amp;", "&");
     }
 
-    private String trimAfterFormatDash(String url) {
-        String marker = "format=dash";
-        int index = url.indexOf(marker);
-        if (index == -1) {
-            return url;
-        }
-        return url.substring(0, index + marker.length());
-    }
-
     private void dumpDiagnostics(Page page, String streamUrl, Consumer<String> logger) {
         if (page == null) {
             return;
@@ -372,7 +351,7 @@ public class StreamManifestResolver {
         return newline == -1 ? message : message.substring(0, newline);
     }
 
-    static final class NonRetryableResolveException extends IllegalStateException {
+    static class NonRetryableResolveException extends IllegalStateException {
         NonRetryableResolveException(String message, Throwable cause) {
             super(message, cause);
         }
