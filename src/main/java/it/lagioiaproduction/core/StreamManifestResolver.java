@@ -2,7 +2,6 @@ package it.lagioiaproduction.core;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
@@ -64,12 +63,8 @@ public class StreamManifestResolver {
             throw new IllegalStateException("Sessione non trovata. Premi prima 'Login Microsoft'.");
         }
 
-        try (Playwright playwright = Playwright.create();
-             Browser browser = playwright.chromium().launch(
-                     new BrowserType.LaunchOptions()
-                             .setChannel("msedge")
-                             .setHeadless(true)
-             )) {
+        try (Playwright playwright = PlaywrightBrowserFactory.createPlaywright();
+             Browser browser = PlaywrightBrowserFactory.launch(playwright, true)) {
 
             BrowserContext context = browser.newContext(
                     new Browser.NewContextOptions().setStorageStatePath(authStatePath)

@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Mantiene aggiornato Playwright (e le altre dipendenze Maven) così resta
+  # compatibile con Microsoft Edge, che si aggiorna automaticamente.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      playwright:
+        patterns:
+          - "com.microsoft.playwright:*"

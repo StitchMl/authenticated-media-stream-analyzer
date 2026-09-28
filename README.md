@@ -17,7 +17,11 @@ The application automates:
 
 Before using the application, make sure the following software is installed on your system:
 
-### 1. FFmpeg
+### 1. Microsoft Edge
+The application always drives the **Microsoft Edge** installed on your system (Playwright channel `msedge`).
+Edge updates itself automatically; keep it up to date from `edge://settings/help`.
+
+### 2. FFmpeg
 This application relies on [`ffmpeg`](https://www.ffmpeg.org/download.html) to download and save video streams.
 
 Install FFmpeg first and make sure it is available in your system `PATH`.
@@ -65,6 +69,7 @@ Generated filenames follow the pattern:
 
 * Java 17+
 * Maven 3.9+
+* Microsoft Edge (installed system-wide)
 * `ffmpeg` installed and available in `PATH`
 ---
 
@@ -106,6 +111,7 @@ src/main/java/it/lagioiaproduction/
 │  ├─ DownloadCoordinator.java
 │  ├─ FileNameGenerator.java
 │  ├─ FfmpegRunner.java
+│  ├─ PlaywrightBrowserFactory.java
 │  ├─ StreamLoginService.java
 │  └─ StreamManifestResolver.java
 └─ model/
@@ -126,17 +132,23 @@ git clone https://github.com/<your-username>/teams-stream-lecture-downloader.git
 cd teams-stream-lecture-downloader
 ```
 
-### 2. Install Playwright browsers
-
-```bash
-mvn exec:java -Dexec.mainClass="com.microsoft.playwright.CLI" -Dexec.args="install"
-```
-
-### 3. Build the project
+### 2. Build the project
 
 ```bash
 mvn clean package
 ```
+
+No Playwright browser download is needed: the app uses the system Microsoft Edge.
+
+### 3. Build the Windows installer (optional)
+
+Requires the JDK `jpackage` tool and [WiX Toolset 3.x](https://github.com/wixtoolset/wix3/releases) in `PATH`:
+
+```powershell
+.uild-exe.ps1
+```
+
+The installer is written to `target/dist/`.
 
 ---
 
@@ -151,7 +163,7 @@ mvn exec:java -Dexec.mainClass="it.lagioiaproduction.app.TeamsLectureDownloaderA
 ### From the packaged JAR
 
 ```bash
-java -jar target/teams-stream-lecture-downloader-1.0.0.jar
+java -jar target/teams-stream-lecture-downloader-1.0.2.jar
 ```
 
 ---
@@ -244,6 +256,12 @@ Check with:
 ffmpeg -version
 ```
 
+### Browser closes immediately / `TargetClosedError`
+
+Edge is updated automatically, so an old Playwright version may no longer be able to drive it.
+The Playwright version is defined by the `playwright.version` property in `pom.xml` and is kept
+up to date by Dependabot (`.github/dependabot.yml`). Update it, rebuild, and make sure Edge is up to date.
+
 ### Session expired
 
 If downloads stop working because authentication is no longer valid:
@@ -259,6 +277,7 @@ If downloads stop working because authentication is no longer valid:
 Main responsibilities are split as follows:
 
 * `DownloadCoordinator`: application orchestration
+* `PlaywrightBrowserFactory`: single place where Playwright and Microsoft Edge are launched
 * `StreamLoginService`: Microsoft login and auth state persistence
 * `StreamManifestResolver`: embed extraction and manifest interception
 * `FfmpegRunner`: media download and progress parsing
