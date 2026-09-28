@@ -6,19 +6,20 @@
 
     <groupId>it.lagioiaproduction</groupId>
     <artifactId>teams-stream-lecture-downloader</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <playwright.version>1.63.0</playwright.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>com.microsoft.playwright</groupId>
             <artifactId>playwright</artifactId>
-            <version>1.49.0</version>
+            <version>${playwright.version}</version>
         </dependency>
         <dependency>
             <groupId>com.formdev</groupId>

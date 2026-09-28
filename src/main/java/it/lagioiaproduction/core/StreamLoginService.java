@@ -26,18 +26,13 @@ public class StreamLoginService {
     public void loginAndSaveState(Consumer<String> logger) throws Exception {
         Files.createDirectories(AUTH_STATE.getParent());
 
-        try (Playwright playwright = Playwright.create();
-             Browser browser = playwright.chromium().launch(
-                     new com.microsoft.playwright.BrowserType.LaunchOptions()
-                             .setChannel("msedge")
-                             .setHeadless(false)
-                             .setSlowMo(150)
-             )) {
+        try (Playwright playwright = PlaywrightBrowserFactory.createPlaywright();
+             Browser browser = PlaywrightBrowserFactory.launch(playwright, false, 150)) {
 
             BrowserContext context = browser.newContext();
             Page page = context.newPage();
 
-            log(logger, "Apro Microsoft Edge per il login...");
+            log(logger, "Apro " + PlaywrightBrowserFactory.BROWSER_DISPLAY_NAME + " per il login...");
             page.navigate("https://login.microsoftonline.com/");
             log(logger, "Completa login ed eventuale MFA nel browser.");
 
