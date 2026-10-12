@@ -1,12 +1,6 @@
 package it.lagioiaproduction.core;
 
-import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.PlaywrightException;
-import com.microsoft.playwright.Request;
-import com.microsoft.playwright.TimeoutError;
+import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.LoadState;
 import it.lagioiaproduction.model.ResolvedStream;
 
@@ -73,8 +67,16 @@ public class StreamManifestResolver {
             throw new IllegalStateException("Sessione non trovata. Premi prima 'Login Microsoft'.");
         }
 
-        try (Playwright playwright = PlaywrightBrowserFactory.createPlaywright();
-             BrowserContext context = PlaywrightBrowserFactory.launchPersistent(playwright, true)) {
+        try (Playwright playwright =
+                     PlaywrightBrowserFactory.createPlaywright();
+             Browser browser =
+                     PlaywrightBrowserFactory.launchWorkerBrowser(
+                             playwright
+                     );
+             BrowserContext context =
+                     PlaywrightBrowserFactory.createWorkerContext(
+                             browser, authStatePath)
+        ) {
 
             Page streamPage = PlaywrightBrowserFactory.firstPage(context);
             try {

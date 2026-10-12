@@ -160,23 +160,17 @@ public class DownloadCoordinator {
 
         ResolvedStream resolved;
         boolean acquired = false;
+        Exception resolveFailure = null;
 
         try {
             resolveSemaphore.acquire();
             acquired = true;
 
-            waitBeforeNextResolve(request, statusConsumer, progressConsumer);
-
-            notifyStatus(statusConsumer, "Risoluzione link " + request.index() + "/" + request.total() + "...");
-            notifyProgress(progressConsumer, new DownloadProgress(
-                    request.index(),
-                    request.total(),
-                    "File " + request.index(),
-                    "Risoluzione link",
-                    0.0,
-                    true,
-                    "Recupero embed e manifest DASH..."
-            ));
+            waitBeforeNextResolve(
+                    request,
+                    statusConsumer,
+                    progressConsumer
+            );
 
             resolved = manifestResolver.resolveWithRetry(
                     request.streamUrl(),
@@ -184,28 +178,31 @@ public class DownloadCoordinator {
                     statusConsumer
             );
 
-            markResolveFinished();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Download interrotto mentre attendeva la fase di risoluzione.", ex);
+            throw new IllegalStateException(
+                    "Download interrotto durante il resolve.",
+                    ex
+            );
+
         } catch (Exception ex) {
-            markResolveFinished();
-
-            notifyProgress(progressConsumer, new DownloadProgress(
-                    request.index(),
-                    request.total(),
-                    "File " + request.index(),
-                    "Errore",
-                    0.0,
-                    false,
-                    rootCauseMessage(ex)
-            ));
-
-            applyFailureCooldown(request, statusConsumer, progressConsumer);
+            resolveFailure = ex;
             throw ex;
+
         } finally {
             if (acquired) {
+                markResolveFinished();
                 resolveSemaphore.release();
+            }
+
+            // Se la risoluzione fallisce, il cooldown
+            // avviene senza tenere occupato il semaforo.
+            if (resolveFailure != null) {
+                applyFailureCooldown(
+                        request,
+                        statusConsumer,
+                        progressConsumer
+                );
             }
         }
 
@@ -239,16 +236,25 @@ public class DownloadCoordinator {
                             request.index(), request.total(), displayName, "Download in corso",
                             update.fraction(), false, update.detail()));
             if (resolved.encrypted()) {
-                notifyStatus(statusConsumer, "Flusso DASH SEA: download e decifratura con sessione browser.");
-                resolveSemaphore.acquire();
-                try {
-                    new SeaStreamDownloader().download(resolved, outputFile, ffmpegRunner, updates);
-                } finally {
-                    markResolveFinished();
-                    resolveSemaphore.release();
-                }
+                notifyStatus(statusConsumer,
+                        "Avvio download DASH SEA parallelo: "
+                                + displayName
+                );
+
+                new SeaStreamDownloader().download(
+                            resolved,
+                        outputFile,
+                        loginService.getAuthStatePath(),
+                        ffmpegRunner,
+                        updates
+                    );
             } else {
-                ffmpegRunner.download(resolved.manifestUrl(), resolved.requestHeaders(), outputFile, updates);
+                ffmpegRunner.download(
+                        resolved.manifestUrl(),
+                        resolved.requestHeaders(),
+                        outputFile,
+                        updates
+                );
             }
 
         } catch (Exception ex) {

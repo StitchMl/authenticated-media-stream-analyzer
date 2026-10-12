@@ -16,14 +16,27 @@ import org.w3c.dom.*;
 public final class SeaStreamDownloader {
     record Track(String type, String initialization, List<String> segments, String keyUri, byte[] iv, String layout) { }
 
-    public void download(ResolvedStream resolved, Path output, FfmpegRunner ffmpeg,
-                         Consumer<FfmpegRunner.ProgressUpdate> progress) throws Exception {
+    public void download(
+            ResolvedStream resolved,
+            Path output,
+            Path authStatePath,
+            FfmpegRunner ffmpeg,
+            Consumer<FfmpegRunner.ProgressUpdate> progress
+    ) throws Exception {
         Path temporary = Files.createTempDirectory(output.toAbsolutePath().getParent(), ".sea-");
         List<Path> tracks = new ArrayList<>();
         try {
-            try (Playwright playwright = PlaywrightBrowserFactory.createPlaywright();
-                 BrowserContext context = PlaywrightBrowserFactory.launchPersistent(playwright, true)) {
-                Page page = PlaywrightBrowserFactory.firstPage(context);
+            try (Playwright playwright =
+                         PlaywrightBrowserFactory.createPlaywright();
+                 Browser browser =
+                         PlaywrightBrowserFactory.launchWorkerBrowser(
+                                 playwright
+                         );
+                 BrowserContext context =
+                         PlaywrightBrowserFactory.createWorkerContext(
+                                 browser, authStatePath
+                         )) {
+                Page page = context.newPage();
                 // Obtain fresh signed URLs and session token after any wait for the browser slot.
                 Response response = openManifest(page, resolved.embedUrl());
                 Map<String, String> headers = response.request().allHeaders();

@@ -5,6 +5,7 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
+import com.microsoft.playwright.Browser;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,5 +86,35 @@ public final class PlaywrightBrowserFactory {
         }
 
         return Paths.get(System.getProperty("user.home"), ".teams-stream-lecture-downloader");
+    }
+
+
+    public static Browser launchWorkerBrowser(
+            Playwright playwright
+    ) {
+        BrowserType.LaunchOptions options =
+                new BrowserType.LaunchOptions()
+                        .setChannel(BROWSER_CHANNEL)
+                        .setHeadless(true);
+
+        return playwright.chromium().launch(options);
+    }
+
+    public static BrowserContext createWorkerContext(
+            Browser browser,
+            Path authStatePath
+    ) {
+        if (authStatePath == null ||
+                !Files.isRegularFile(authStatePath)) {
+            throw new IllegalStateException(
+                    "Stato autenticazione non disponibile."
+            );
+        }
+
+        Browser.NewContextOptions options =
+                new Browser.NewContextOptions()
+                        .setStorageStatePath(authStatePath);
+
+        return browser.newContext(options);
     }
 }

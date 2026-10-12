@@ -45,7 +45,11 @@ public class StreamLoginService {
             waitUntilLoginCompleted(context, page);
 
             log(logger, "Login rilevato, salvo la sessione...");
-            context.storageState(new BrowserContext.StorageStateOptions().setPath(AUTH_STATE));
+            context.storageState(
+                    new BrowserContext.StorageStateOptions()
+                            .setPath(AUTH_STATE)
+                            .setIndexedDB(true)
+            );
             log(logger, "Sessione salvata nel profilo: " + PlaywrightBrowserFactory.PROFILE_DIR.toAbsolutePath());
         }
     }
