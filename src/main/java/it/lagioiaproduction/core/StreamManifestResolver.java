@@ -222,53 +222,27 @@ public class StreamManifestResolver {
         }
     }
 
-
-
     private void openEmbedDialog(
             Page page,
             Consumer<String> logger
     ) {
-        try {
-            java.nio.file.Path debugDir =
-                    PlaywrightBrowserFactory.APP_DATA_DIR
-                            .resolve("debug");
+        // 1. Apri il menu Condividi
+        clickShare(page, logger);
 
-            java.nio.file.Files.createDirectories(debugDir);
+        // 2. Seleziona Codice di incorporamento
+        log(logger, "Cerco Codice di incorporamento...");
 
-            java.nio.file.Path screenshot =
-                    debugDir.resolve("share-debug.png");
+        clickFirstWithRetry(
+                page,
+                logger,
+                "Codice di incorporamento",
+                "text=Codice di incorporamento",
+                "text=Embed code",
+                "text=Incorpora",
+                "text=Embed"
+        );
 
-            java.nio.file.Path html =
-                    debugDir.resolve("share-debug.html");
-
-            log(logger, "DEBUG URL: " + page.url());
-            log(logger, "DEBUG TITOLO: " + page.title());
-
-            page.screenshot(
-                    new Page.ScreenshotOptions()
-                            .setPath(screenshot)
-                            .setFullPage(true)
-            );
-
-            java.nio.file.Files.writeString(
-                    html,
-                    page.content()
-            );
-
-            log(logger, "Screenshot salvato in: " + screenshot);
-            log(logger, "HTML salvato in: " + html);
-
-            throw new IllegalStateException(
-                    "Diagnostica completata. "
-                            + "Controlla share-debug.png"
-            );
-
-        } catch (java.io.IOException ex) {
-            throw new IllegalStateException(
-                    "Impossibile salvare la diagnostica",
-                    ex
-            );
-        }
+        log(logger, "Codice di incorporamento aperto.");
     }
 
     private void clickShare(
@@ -277,44 +251,34 @@ public class StreamManifestResolver {
     ) {
         log(logger, "Cerco il pulsante Condividi...");
 
-        java.util.regex.Pattern pattern =
-                java.util.regex.Pattern.compile(
-                        "Condividi|Share",
-                        java.util.regex.Pattern.CASE_INSENSITIVE
-                );
-
-        Locator share = page.getByRole(
-                com.microsoft.playwright.options.AriaRole.BUTTON,
-                new Page.GetByRoleOptions()
-                        .setName(pattern)
+        Locator share = page.locator(
+                "button[data-automationid='shareDropdown']"
         );
 
         try {
-            share.first().click(
+            share.waitFor(
+                    new Locator.WaitForOptions()
+                            .setState(
+                                    com.microsoft.playwright.options
+                                            .WaitForSelectorState.VISIBLE
+                            )
+                            .setTimeout(15000)
+            );
+
+            share.click(
                     new Locator.ClickOptions()
                             .setTimeout(10000)
             );
 
-            log(logger, "Pulsante Condividi trovato.");
-            return;
+            log(logger, "Pulsante Condividi cliccato.");
 
         } catch (PlaywrightException ex) {
-            log(logger, "Ricerca tramite ruolo fallita, provo selettori alternativi...");
+            throw new IllegalStateException(
+                    "Impossibile aprire il menu Condividi: "
+                            + ex.getMessage(),
+                    ex
+            );
         }
-
-        clickFirstWithRetry(
-                page,
-                logger,
-                "Condividi",
-                "[aria-label*='Condividi']",
-                "[aria-label*='Share']",
-                "[title*='Condividi']",
-                "[title*='Share']",
-                "button:has-text(\"Condividi\")",
-                "button:has-text(\"Share\")",
-                "text=Condividi",
-                "text=Share"
-        );
     }
 
     private void clickFirstWithRetry(Page page, Consumer<String> logger, String actionLabel, String... selectors) {
