@@ -54,9 +54,14 @@ public final class SeaStreamDownloader {
                             // SharePoint may encrypt initialization too, unlike standard DASH SEA.
                             byte[] initialization = BrowserMediaClient.bytes(page, List.of(track.initialization), Map.of()).get(0);
                             stream.write(decodeInitialization(initialization, key, track.iv));
-                            for (int start = 0; start < track.segments.size(); start += 4) {
+                            final int BATCH_SIZE = 2;
+
+                            for (int start = 0; start < track.segments.size(); start += BATCH_SIZE) {
                                 if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Download interrotto.");
-                                List<String> batch = track.segments.subList(start, Math.min(start + 4, track.segments.size()));
+                                List<String> batch = track.segments.subList(
+                                        start,
+                                        Math.min(start + BATCH_SIZE, track.segments.size())
+                                );
                                 List<byte[]> segmentData;
                                 try {
                                     segmentData = BrowserMediaClient.bytes(page, batch, Map.of());

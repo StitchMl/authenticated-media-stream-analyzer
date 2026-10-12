@@ -15,39 +15,114 @@ final class BrowserMediaClient {
         }
     }
 
+
     private static final String FETCH = """
-        async ({urls, headers, text}) => await Promise.all(urls.map(async url => {
-          for (let attempt = 0; attempt < 3; attempt++) {
+    async ({urls, headers, text}) => {
+      const sleep = ms =>
+        new Promise(resolve => setTimeout(resolve, ms));
+
+      return await Promise.all(urls.map(async url => {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(
+              () => controller.abort(), 30000
+            );
+
+            let response, body;
+
             try {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 30000);
-              let response, body;
-              try {
-                response = await fetch(url, {headers, credentials: Object.keys(headers).length ? 'same-origin' : 'include', cache: 'no-store', signal: controller.signal});
-                if (response.ok) body = text ? await response.text() : new Uint8Array(await response.arrayBuffer());
-              } finally { clearTimeout(timer); }
+              response = await fetch(url, {
+                headers,
+                credentials:
+                  Object.keys(headers).length
+                    ? 'same-origin'
+                    : 'include',
+                cache: 'no-store',
+                signal: controller.signal
+              });
+
               if (response.ok) {
-                if (text) return {status: response.status, body};
-                let binary = '';
-                for (let i = 0; i < body.length; i += 8192)
-                  binary += String.fromCharCode(...body.subarray(i, i + 8192));
-                return {status: response.status, body: btoa(binary)};
+                body = text
+                  ? await response.text()
+                  : new Uint8Array(await response.arrayBuffer());
               }
-              // Some media CDN responses transiently reject a signed request. Retry it once
-              // with exactly the same session; persistent denials are returned to the caller.
-              if (response.status === 401 && attempt === 0) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                continue;
-              }
-              if (response.status !== 429 && response.status < 500) return {status: response.status};
-              if (attempt === 2) return {status: response.status};
-            } catch (e) {
-              if (attempt === 2) return {status: 0};
+            } finally {
+              clearTimeout(timer);
             }
-            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+
+            if (response.ok) {
+              if (text) {
+                return {status: response.status, body};
+              }
+
+              let binary = '';
+              for (let i = 0; i < body.length; i += 8192) {
+                binary += String.fromCharCode(
+                  ...body.subarray(i, i + 8192)
+                );
+              }
+
+              return {
+                status: response.status,
+                body: btoa(binary)
+              };
+            }
+
+            const status = response.status;
+
+            if (status !== 429 && status < 500 &&
+                !(status === 401 && attempt === 0)) {
+              return {status};
+            }
+
+            if (attempt === 5) {
+              return {status};
+            }
+
+            // Retry-After può essere espresso
+            // in secondi o come data HTTP.
+            const retryAfter =
+              response.headers.get('Retry-After');
+
+            let delay = Math.min(
+              60000,
+              1000 * Math.pow(2, attempt)
+            );
+
+            if (retryAfter) {
+              const seconds = Number(retryAfter);
+              const parsed = Number.isFinite(seconds)
+                ? seconds * 1000
+                : Date.parse(retryAfter) - Date.now();
+
+              if (Number.isFinite(parsed)) {
+                delay = Math.max(delay, parsed);
+              }
+            }
+
+            if (status === 429) {
+              delay = Math.min(
+                300000,
+                Math.max(0, delay)
+              );
+            }
+
+            await sleep(delay);
+
+          } catch (e) {
+            if (attempt === 5) {
+              return {status: 0};
+            }
+
+            await sleep(
+              Math.min(30000, 1000 * Math.pow(2, attempt))
+            );
           }
-        }))
-        """;
+        }
+      }));
+    }
+    """;
 
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> fetch(Page page, List<String> urls, Map<String, String> headers, boolean text) {
@@ -67,9 +142,29 @@ final class BrowserMediaClient {
             if (status == 401) throw new UnauthorizedMediaException();
             if (status == 403) throw new StreamManifestResolver.NonRetryableResolveException(
                     "Accesso negato a manifest, chiave o segmenti (HTTP " + status + "): verifica login e permessi.", null);
-            if (status < 200 || status >= 300) throw new IllegalStateException(
-                    status == 0 ? "Connessione media fallita nel browser (rete, TLS o CORS)."
-                            : "Richiesta media fallita: HTTP " + status);
+
+            if (status < 200 || status >= 300) {
+                int index = results.indexOf(result);
+
+                String resourceUrl = urls.get(index);
+
+                String resourceType;
+
+                if (resourceUrl.contains("videomanifest")) {
+                    resourceType = "Manifest DASH";
+                } else if (resourceUrl.contains("key")) {
+                    resourceType = "Possibile chiave DASH";
+                } else {
+                    resourceType = "Risorsa media/segmento";
+                }
+
+                throw new IllegalStateException(
+                        "HTTP " + status +
+                                " durante il download di: " +
+                                resourceType +
+                                " (elemento batch " + index + ")"
+                );
+            }
         }
         return results;
     }
