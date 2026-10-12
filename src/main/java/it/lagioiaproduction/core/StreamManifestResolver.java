@@ -69,22 +69,34 @@ public class StreamManifestResolver {
 
         try (Playwright playwright =
                      PlaywrightBrowserFactory.createPlaywright();
-             Browser browser =
-                     PlaywrightBrowserFactory.launchWorkerBrowser(
-                             playwright
-                     );
              BrowserContext context =
-                     PlaywrightBrowserFactory.createWorkerContext(
-                             browser, authStatePath)
-        ) {
+                     PlaywrightBrowserFactory.launchPersistent(
+                             playwright, true
+                     )) {
 
             Page streamPage = PlaywrightBrowserFactory.firstPage(context);
             try {
                 log(logger, "Apro la pagina Stream...");
                 streamPage.navigate(streamUrl, new Page.NavigateOptions()
-                        .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
+                        .setWaitUntil(
+                                com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED
+                        )
+                        .setTimeout(45_000));
+                log(logger, "URL effettivo: " + streamPage.url());
+                log(logger, "Titolo effettivo: " + streamPage.title());
+
+                streamPage.screenshot(
+                        new Page.ScreenshotOptions()
+                                .setPath(
+                                        PlaywrightBrowserFactory.APP_DATA_DIR.resolve(
+                                                "debug-page.png"
+                                        )
+                                )
+                                .setFullPage(true)
+                );
                 waitForSingleSignOn(streamPage);
                 waitForBasePageReady(streamPage);
+                verifyAuthenticatedPage(streamPage);
                 ensureAccessGranted(streamPage);
 
                 String embedUrl;
@@ -142,6 +154,22 @@ public class StreamManifestResolver {
         }
     }
 
+    private void verifyAuthenticatedPage(Page page) {
+        String url = page.url().toLowerCase(
+                java.util.Locale.ROOT
+        );
+
+        if (PlaywrightBrowserFactory.isMicrosoftLoginUrl(url)
+                || url.contains("/oauth2/")
+                || url.contains("/login")) {
+            throw new IllegalStateException(
+                    "Il browser isolato non ha recuperato "
+                            + "la sessione Microsoft. "
+                            + "Esegui nuovamente il login."
+            );
+        }
+    }
+
     private Map<String, String> extractAuthHeaders(Request manifestRequest) {
         Map<String, String> all = manifestRequest.allHeaders();
         Map<String, String> headers = new LinkedHashMap<>();
@@ -194,29 +222,98 @@ public class StreamManifestResolver {
         }
     }
 
-    private void openEmbedDialog(Page page, Consumer<String> logger) {
-        clickFirstWithRetry(
-                page,
-                logger,
-                "Condividi",
-                "button:has-text(\"Condividi\")",
-                "button:has-text(\"Share\")",
-                "button[aria-label*='Condividi']",
-                "button[aria-label*='Share']",
-                "[title='Condividi']",
-                "[title='Share']",
-                "text=Condividi",
-                "text=Share"
+
+
+    private void openEmbedDialog(
+            Page page,
+            Consumer<String> logger
+    ) {
+        try {
+            java.nio.file.Path debugDir =
+                    PlaywrightBrowserFactory.APP_DATA_DIR
+                            .resolve("debug");
+
+            java.nio.file.Files.createDirectories(debugDir);
+
+            java.nio.file.Path screenshot =
+                    debugDir.resolve("share-debug.png");
+
+            java.nio.file.Path html =
+                    debugDir.resolve("share-debug.html");
+
+            log(logger, "DEBUG URL: " + page.url());
+            log(logger, "DEBUG TITOLO: " + page.title());
+
+            page.screenshot(
+                    new Page.ScreenshotOptions()
+                            .setPath(screenshot)
+                            .setFullPage(true)
+            );
+
+            java.nio.file.Files.writeString(
+                    html,
+                    page.content()
+            );
+
+            log(logger, "Screenshot salvato in: " + screenshot);
+            log(logger, "HTML salvato in: " + html);
+
+            throw new IllegalStateException(
+                    "Diagnostica completata. "
+                            + "Controlla share-debug.png"
+            );
+
+        } catch (java.io.IOException ex) {
+            throw new IllegalStateException(
+                    "Impossibile salvare la diagnostica",
+                    ex
+            );
+        }
+    }
+
+    private void clickShare(
+            Page page,
+            Consumer<String> logger
+    ) {
+        log(logger, "Cerco il pulsante Condividi...");
+
+        java.util.regex.Pattern pattern =
+                java.util.regex.Pattern.compile(
+                        "Condividi|Share",
+                        java.util.regex.Pattern.CASE_INSENSITIVE
+                );
+
+        Locator share = page.getByRole(
+                com.microsoft.playwright.options.AriaRole.BUTTON,
+                new Page.GetByRoleOptions()
+                        .setName(pattern)
         );
+
+        try {
+            share.first().click(
+                    new Locator.ClickOptions()
+                            .setTimeout(10000)
+            );
+
+            log(logger, "Pulsante Condividi trovato.");
+            return;
+
+        } catch (PlaywrightException ex) {
+            log(logger, "Ricerca tramite ruolo fallita, provo selettori alternativi...");
+        }
 
         clickFirstWithRetry(
                 page,
                 logger,
-                "Codice di incorporamento",
-                "text=Codice di incorporamento",
-                "text=Embed code",
-                "text=Incorpora",
-                "text=Embed"
+                "Condividi",
+                "[aria-label*='Condividi']",
+                "[aria-label*='Share']",
+                "[title*='Condividi']",
+                "[title*='Share']",
+                "button:has-text(\"Condividi\")",
+                "button:has-text(\"Share\")",
+                "text=Condividi",
+                "text=Share"
         );
     }
 
