@@ -113,20 +113,67 @@ public class StreamManifestResolver {
 
                 Page embedPage = context.newPage();
 
+                embedPage.onRequest(request -> {
+                    String url = request.url().toLowerCase(java.util.Locale.ROOT);
+
+                    if (url.contains("manifest")
+                            || url.contains(".mpd")
+                            || url.contains(".m3u8")) {
+
+                        log(logger, "[MEDIA REQUEST] "
+                                + request.method() + " "
+                                + request.url().split("\\?")[0]);
+                    }
+                });
+
+                embedPage.onResponse(response -> {
+                    String url = response.url().toLowerCase(java.util.Locale.ROOT);
+
+                    if (url.contains("manifest")
+                            || url.contains(".mpd")
+                            || url.contains(".m3u8")) {
+
+                        log(logger, "[MEDIA RESPONSE] HTTP "
+                                + response.status() + " "
+                                + response.url().split("\\?")[0]);
+                    }
+                });
+
                 log(logger, "Apro la pagina embed e intercetto il videomanifest...");
-                Request manifestRequest = embedPage.waitForRequest(
-                        request -> {
-                            String url = request.url();
-                            return url.contains("videomanifest?")
-                                    && url.contains("format=dash");
-                        },
-                        new Page.WaitForRequestOptions().setTimeout(MANIFEST_TIMEOUT_MS),
-                        () -> {
-                            embedPage.navigate(embedUrl, new Page.NavigateOptions()
-                                    .setWaitUntil(com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED).setTimeout(45_000));
-                            embedPage.waitForLoadState(LoadState.DOMCONTENTLOADED);
-                        }
-                );
+                Request manifestRequest;
+
+                try {
+                    manifestRequest = embedPage.waitForRequest(
+                            request -> {
+                                String url = request.url();
+                                return url.contains("videomanifest?")
+                                        && url.contains("format=dash");
+                            },
+                            new Page.WaitForRequestOptions()
+                                    .setTimeout(MANIFEST_TIMEOUT_MS),
+                            () -> embedPage.navigate(
+                                    embedUrl,
+                                    new Page.NavigateOptions()
+                                            .setWaitUntil(
+                                                    com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED
+                                            )
+                                            .setTimeout(45_000)
+                            )
+                    );
+                } catch (com.microsoft.playwright.TimeoutError ex) {
+                    log(logger, "[ERRORE] Timeout durante l'apertura o "
+                            + "l'intercettazione del manifest DASH.");
+                    log(logger, "[DEBUG] URL pagina embed: "
+                            + embedPage.url().split("\\?")[0]);
+
+                    throw new IllegalStateException(
+                            "Impossibile intercettare il manifest DASH entro "
+                                    + (long) (MANIFEST_TIMEOUT_MS / 1000)
+                                    + " secondi. Verificare i log delle richieste "
+                                    + "multimediali e l'autenticazione.",
+                            ex
+                    );
+                }
 
                 String manifestUrl = manifestRequest.url();
                 Map<String, String> authHeaders = extractAuthHeaders(manifestRequest);
